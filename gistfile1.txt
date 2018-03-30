@@ -1,7 +1,7 @@
 ---
-title: "<ed>깘<ec>깋<ec>쟻 <ec>옄猷뚮텇<ec>꽍 hw1"
+title: "탐색적 자료분석 hw1"
 author: "Kyucheol Eom"
-date: "2018<eb>뀈 3<ec>썡 28<ec>씪"
+date: "2018년 3일 28"
 output:
   word_document: default
   html_document: default
