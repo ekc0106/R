@@ -1,7 +1,7 @@
 ---
 title: "탐색적 자료분석 hw1"
 author: "Kyucheol Eom"
-date: "2018년 3일 28"
+date: "2018년 3일 28년"
 output:
   word_document: default
   html_document: default
@@ -75,7 +75,7 @@ temp <- list(a=c(T,F),b=diag(c(1,1)),c=seq(0,1,length=100),d=1:4,e=1:4,f=1:4,g=1
 ```
 2)temp 리스트의 두번째 원소를 제거하라.
 ```{r}
-temp <- temp[-2]
+(temp <- temp[-2])
 ```
 3) 2)의 결과 temp 리스트의 3번째 위치하는 결과값은 무없인가
 ```{r}
