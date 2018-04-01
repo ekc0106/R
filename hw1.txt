@@ -1,12 +1,3 @@
----
-title: "탐색적 자료분석 hw1"
-author: "Kyucheol Eom"
-date: "2018년 3일 28년"
-output:
-  word_document: default
-  html_document: default
-  pdf_document: default
----
 # **R-Object**
 1.다음 데이터를 벡터 x에 다음 숫자열이 입력되어있다.
 17  16  20  24  22  15  21  18
