@@ -170,7 +170,7 @@ m.mat
 idist <- matrix(0,1000,10)
 for(i in 1:1000){
   for(j in 1:10){
-    idist[i,j] <- sum(x[i,]*m.mat[j,])/(sum(x[i,]^2)*sum(m.mat[j,]^2))
+    idist[i,j] <- sum(x[i,]*m.mat[j,])/sqrt(sum(x[i,]^2)*sum(m.mat[j,]^2))
   }
 }
 str(idist)
