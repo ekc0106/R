@@ -208,7 +208,7 @@ table(num_game)
 ```{r}
 score <- numeric(10)
 for (i in 1:length(num_game)){
-  if (num_game[i]<=3){
+  if (num_game>=2 & num_game[i]<=3){
     j <- a[[i]][1]
     score[j] <- score[j]+1
   }
