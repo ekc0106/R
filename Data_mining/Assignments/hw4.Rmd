@@ -1,0 +1,120 @@
+# <1> 
+4장 3번. 3장의 R 예제에서는 Sonar 자료에 대하여 AIC와 BIC를 이용하여 전진선택법으로 변수를 선택하였다. 두 모형에 대하여 ROC 곡선과 이익도표(K=10)를 그려보고 비교해라.
+```{r}
+library(mlbench)
+data("Sonar")
+str(Sonar)
+Sonar$Class <- as.numeric(Sonar$Class)
+Sonar$Class[which(Sonar$Class==2)] <- 0
+fmla <- as.formula(paste('Class','~',paste(colnames(Sonar)[-ncol(Sonar)],collapse = '+')))
+
+glm.const <- glm(Class~1, data = Sonar, family = binomial('logit'))
+forward.aic <- step(glm.const, fmla, direction = 'forward')
+forward.bic <- step(glm.const, fmla, direction = 'forward', k=log(nrow(Sonar)))
+summary(forward.aic)
+summary(forward.bic)
+
+pred.aic <-  predict(forward.aic,type="response")
+pred <- rep(0, length(pred.aic))
+pred[pred.aic>=0.5] <- 1
+pred.bic <- predict(forward.bic, type = 'response')
+pred <- rep(0, length(pred.bic))
+pred[pred.bic>=0.5] <- 1
+
+# ROC curve
+library(ROCR)
+ROC.aic <-  performance(prediction(pred.aic,Sonar$Class),"tpr","fpr")
+ROC.bic <-  performance(prediction(pred.bic,Sonar$Class),"tpr","fpr")
+plot(ROC.aic,main='ROC curve')
+x = unlist(attr(ROC.bic, "x.values"))
+y = unlist(attr(ROC.bic, "y.values"))
+lines(x, y, lty=2, col=2)
+legend('bottomright', legend=c("AIC","BIC"),lty=1:2, col=1:2)
+AUC.aic <- performance(prediction(pred.aic, Sonar$Class),'auc')
+AUC.bic <- performance(prediction(pred.bic, Sonar$Class),'auc')
+AUC.aic@y.values
+AUC.bic@y.values
+#그림에서도 볼 수 있듯이, aic의 ROC 커브가 좀 더 위쪽에 있어 bic보다 더 예측력이 더 우수하다고 할 수 있다. 뿐만아니라, AUC를 확인하여도 0.9877, 0.8977로 aic일때가 더 큰 것을 알 수 있다. 
+
+# lift chart function
+fun.lift = function(xx, K)
+{
+  num.class = round(nrow(xx)/K)
+  base.lift = sum(xx[,1])/nrow(xx)
+  class.lift = list() ; output = c()
+  for(i in 1:K)
+  {
+    if(i!=K) {
+      class.lift[[i]] = seq((1+num.class*(i-1)), num.class*i) 
+    } else
+      class.lift[[i]] = seq((1+num.class*(i-1)),nrow(xx))
+    CR = 100*sum(xx[class.lift[[i]],1])/sum(xx[,1])
+    resp = sum(xx[class.lift[[i]],1])/length(class.lift[[i]])
+    lift = resp/base.lift
+    output = rbind(output, c(CR, resp, lift))
+  }
+  colnames(output) = c("%Captured response","%Response","Lift")
+  return(list(base.lift=base.lift,num.class=K,lift.chart=output))
+}
+
+sort.pred.aic = sort(pred.aic,decreasing=T)
+sort.Sonar = Sonar$Class[order(pred.aic,decreasing=T)]
+aic.lift.data = cbind(sort.Sonar, sort.pred.aic) 
+aic.lift = fun.lift(aic.lift.data,10)
+aic.lift
+
+sort.pred.bic = sort(pred.bic, decreasing=T)
+sort.Sonar = Sonar$Class[order(pred.bic, decreasing=T)]
+bic.lift.data = cbind(sort.Sonar, sort.pred.bic)
+bic.lift = fun.lift(bic.lift.data,10)
+bic.lift
+
+# lift chart
+plot(aic.lift$lift.chart[,3], type="o",ylab="Lift",
+     xlab="Class",pch=7,lty=2,col="red")
+lines(bic.lift$lift.char[,3], type="o",pch=7,lty=2,
+      col="blue")
+legend('topright', legend=c("AIC","BIC"),lty=2,
+       col=c(2,4), pch=7 )
+# BIC에서의 경우는 2등급에서의 Lift값이 더 높은 등급인 1등급에서의 Lift값보다 더 큼을 알 수 있다. 즉, 사후확률이 더 큰 1등급에서보다 실제 y=1인 값이 2등급에 더 많다는 뜻이다. 그러므로 예측이 잘 되지 않았다고 볼 수 있다.
+```
+
+
+
+
+## <2> 
+과제3-<2>의 최종 두모형에 대해 ROC 곡선과 AUC를 이용하여 비교하라.
+```{r}
+load("C:/Users/kyucheol/Desktop/학교생활/과제/4학년 1학기/데이터마이닝/NatalRiskData.rData")
+str(sdata)
+for(i in 1:ncol(sdata)){
+  sdata[[i]] <- as.numeric(sdata[[i]])
+}
+fmla2 <- as.formula(paste("atRisk",'~',paste(colnames(sdata[,-(ncol(sdata)-2)]),collapse='+')))
+glm_2 <- glm(atRisk~1, data=sdata, family = binomial('logit'))
+glm.aic <- step(glm_2,fmla2,direction = 'forward')
+glm.bic <- step(glm_2,fmla2,direction = 'forward',k=log(nrow(sdata)))
+summary(glm.aic)
+summary(glm.bic)
+
+pred.aic2 <-  predict(glm.aic,type="response")
+pred <- rep(0, length(pred.aic2))
+pred[pred.aic2>=0.5] <- 1
+
+pred.bic2 <- predict(glm.bic, type = 'response')
+pred <- rep(0, length(pred.bic2))
+pred[pred.bic>=0.5] <- 1
+
+ROC.aic2 <-  performance(prediction(pred.aic2,sdata$atRisk),"tpr","fpr")
+ROC.bic2 <-  performance(prediction(pred.bic2,sdata$atRisk),"tpr","fpr")
+plot(ROC.aic2,main='ROC curve')
+x = unlist(attr(ROC.bic2, "x.values"))
+y = unlist(attr(ROC.bic2, "y.values"))
+lines(x, y, lty=2, col=2)
+legend('bottomright', legend=c("AIC","BIC"),lty=1:2, col=1:2)
+AUC.aic2 <- performance(prediction(pred.aic2, sdata$atRisk),'auc')
+AUC.bic2 <- performance(prediction(pred.bic2, sdata$atRisk),'auc')
+AUC.aic2@y.values
+AUC.bic2@y.values
+# AIC와 BIC로 얻은 최종 모형에서의 ROC곡선을 확인했을 때, 두 곡선이 매우 비슷하게 겹쳐있는것처럼 보인다. AUC를 통해 비교한 결과, AIC의 경우 0.7075908, BIC의 경우 0.7011867로 거의 차이가 없음을 알 수 있다.
+```
