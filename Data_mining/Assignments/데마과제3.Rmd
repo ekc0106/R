@@ -1,0 +1,75 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r}
+library(mlbench)
+data("BreastCancer")
+sum(is.na(BreastCancer)) #NA값이 있기에 생략해보자.
+bc <- na.omit(BreastCancer[,-1])
+str(bc)
+bc$Class <- as.numeric(bc$Class)
+bc <- apply(bc,2,as.numeric) #lda qda 때문에 팩터...를 뉴메릭으로 바꾸신다네.. 로짓모형은 상관없긴한디.
+bc <- data.frame(bc)
+n <- nrow(bc)
+fmla <- as.formula(paste("Class",'~',paste(colnames(bc[,-ncol(bc)]),collapse='+')))
+bc$Class <- bc$Class - 1
+```
+(c) 각 랜덤 분할에서 훈련자료에 대하여 10-묶음 교차확인 오차에 의해 오분류율값을 계산하고 평균과 표준오차를 구하라. 이 값들을 (b)에서 구한 시험오차의 평균과 표준오차와 비교하라.
+```{r}
+library(cvTools)
+library(MASS)
+Result1 <- matrix(0,10,3)
+result <- matrix(0,50,3)
+for (i in 1:50){
+  set.seed(i)
+  train_index <- sample(1:n,size=floor(0.7*n))
+  train <- bc[train_index,] ; test <- bc[-train_index,]
+  cross <- cvFolds(nrow(train),K=10)
+  for(j in 1:10){
+    valid_index <- cross$subsets[cross$which==j]
+    valid <- train[valid_index,] ; train1 <- train[-valid_index,]
+    lda1 <- lda(fmla,data=train1)
+    pre1 <- predict(lda1,valid[,-ncol(valid)])
+    Result1[j,1] <- sum(pre1$class!=valid$Class)/length(valid$Class)
+    qda1 <- qda(fmla,data = train1)
+    pre2 <- predict(qda1, valid[,-ncol(valid)])
+    Result1[j,2] <- sum(pre2$class!=valid$Class)/length(valid$Class)
+    logi1 <- glm(fmla, data=train1, family = binomial('logit'))
+    pre3 <- predict(logi1, valid[,-ncol(valid)],type='response')
+    predicted <- ifelse(pre3>=0.5,1,0)
+    Result1[j,3] <- sum(predicted!=valid$Class)/length(valid$Class)
+  }
+  a <- which.min(Result1[,1])
+  valid_index <- cross$subsets[cross$which==a]
+  train1 <- train[-valid_index,]
+  lda1 <- lda(fmla,data=train1)
+  pre1 <- predict(lda1,test[,-ncol(test)])
+  result[i,1] <- sum(pre1$class!=test$Class)/length(test$Class)
+  b <- which.min(Result1[,2])
+  valid_index <- cross$subsets[cross$which==b]
+  train1 <- train[-valid_index,]
+  qda1 <- qda(fmla,data = train1)
+  pre2 <- predict(qda1, test[,-ncol(test)])
+  result[i,2] <- sum(pre2$class!=test$Class)/length(test$Class)
+  c <- which.min(Result1[,3])
+  valid_index <- cross$subsets[cross$which==c]
+  logi1 <- glm(fmla, data=train1, family = binomial('logit'))
+  pre3 <- predict(logi1, test[,-ncol(test)],type='response')
+  predicted <- ifelse(pre3>=0.5,1,0)
+  result[i,3] <- sum(predicted!=test$Class)/length(test$Class)
+}
+result
+#위의 코드는 각 랜덤분할에서 훈련자료에 대해서 10-묶음 교차확인오차에 의해 가장 오분류율이 적은 모델을 모형으로 선택하여, test셋으로 오분류율을 구하는 과정을 50번 반복한 것이다. 아래는 mean과 SE, 그리고 95%신뢰구간 이다. 
+for(i in 1:3){
+  cat(mean(result[,i]),sd(result[,i])/sqrt(length(result[,i])),'\n')
+}
+for(i in 1:3){
+  cat(c('선형판별분석 오분류율 CI : ','이차판별분석 오분류율 CI : ','로지스틱 회귀 오분류율 CI : ')[i],
+      '[',mean(result[,i])-1.96*sd(result[,i])/sqrt(length(result[,i])),',',
+      mean(result[,i])+1.96*sd(result[,i])/sqrt(length(result[,i])),']','\n')
+}
+
+# 위의 (b)와 비교했을 때, 이차판별 분석에서의 오분류율의 평균은 줄었고, 일차판별분석과 로지스틱 회귀에서의 오분류율의 평균을 증가하였다. 반복수가 줄은 탓에 SE가 커졌음을 알 수 있다.
+```
