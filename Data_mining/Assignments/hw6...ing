@@ -1,0 +1,133 @@
+# <1> 6장 연습문제 2 
+# 데이터 자체가....신경망이든 의사결정나무든 로짓모형이든 분류경계를...그릴라면(dec.bound코드참고) p햇을 찾음
+# 2p_hat(x) - 1 = 0 contour ......
+# tree라이브러리에 partition.tree 쓰면 분류 경계를 그려줌 tree..파일봐보셈
+# 로짓모형은 LDA, 산점도+분류경계..
+library(mlbench)
+library(nnet)
+library(tree)
+library(lars)
+set.seed(7)
+Q2 <- mlbench.xor(100, d = 2)
+plot(Q2)
+error = function(h.size){
+  neuralnet = nnet(classes~., data=Q2, size = h.size,
+                   decay = 5e-4, trace=F)
+  y = Q2$classes
+  p = predict(neuralnet, Q2, type = "class")
+  err = mean(y != p)
+  c(h.size, err)
+}
+out <- t(sapply(2:10,FUN=error))
+plot(out,type="b",xlab="The number of Hidden units",ylab="Error")
+# size = 4로 하자.
+
+neu <- nnet(Q2$classes ~ ., data.frame(Q2$x) , size = 4, decay=5e-4)
+tre <- tree(Q2$classes ~., data.frame(Q2$x))
+logit <- multinom(Q2$classes ~., data.frame(Q2$x), method = 'logistic')
+
+X1 <- seq(min(Q2$x[,1]), max(Q2$x[,1]), length = 100)
+X2 <- seq(min(Q2$x[,2]), max(Q2$x[,2]), length = 100)
+pgrid <- expand.grid(X1,X2)
+names(pgrid) <- c('X1','X2')
+
+pred.nn <- predict(neu,pgrid)
+pred.nn <- 2*ifelse(pred.nn>0.5,1,0) - 1
+pred.lg <- 2*predict(logit, pgrid, type='prob') - 1
+plot(Q2, cex=0.5)
+contour(X1, X2, matrix(pred.lg, length(X1), length(X2)), add = T, labex = 0,
+        drawlavels = FALSE, type = "l", levels = 0, lwd = 2, lty = 7, col = 4)
+contour(X1, X2, matrix(pred.nn, length(X1), length(X2)), add = T, labex = 0,
+        drawlavels = FALSE, type = "l", levels = 0, lwd = 2, lty = 7, col = 3)
+legend('topright', c('logit', 'neural net') ,col = c('blue','green'),lty=c(7,7) )
+par(new = T)
+partition.tree(tre)
+
+
+
+
+# <2> 6장 연습문제 3 
+# 이거는 모델자체가  시그모이드펑션이 1/(1+exp(-v))
+# nnet 뻥션 쓰는게 제일 좋을거임.. 뉴럴렛뻥션은 좀 쓰기가 힘들거임. 뭔가 다 비슷비슷해서~
+# train데이터 100->train error 100개 구할 수 있음. ,MSE=1/100*sum(y[i]-y_hat[i])
+# test데이터 1000개.. 100개가지고 트레인 후 예측 및 평가 1/1000*sum()
+# 10폴드는 train 100개를 90 10 로 훈련 예측 나누고...숫자 10개 가지고 평균을 낸게 CV이지요?
+#(a)
+library(cvTools)
+set.seed(7)
+x1_tr <- rnorm(100) ; x2_tr <- rnorm(100) ; epsilon_tr <- rnorm(100,0,0.08)
+a1 <- c(1,3); a2 <- c(2,-3)
+y <- function(x1,x2,epsilon) {as.vector(1/(1+exp(-a1%*%rbind(x1,x2)))+1/(1+exp(-a2%*%rbind(x1,x2)))+epsilon)}
+y_tr <- y(x1_tr,x2_tr,epsilon_tr)
+Q3_tr <- as.data.frame(cbind(x1_tr,x2_tr,y_tr))
+cross <- cvFolds(nrow(Q3_tr),K=10)
+SSE = function(h,train,valid){
+  neuralnet = nnet(y_tr~., data=train, size = h,
+                   decay = 5e-4, trace=F)
+  pred = predict(neuralnet, valid[,-3])
+  sse <- sum((valid$y_tr - as.vector(pred))^2)
+  return(sse)
+}
+cross <- cvFolds(nrow(Q3_tr),K=10)
+sse_vec <- numeric(10)
+sse_mat <- matrix(0,10,10)
+for(i in 1:10){ #i : num of node
+  for(j in 1:10){ #j : 10-fold CV inx
+    valid_index <- cross$subsets[cross$which==j]
+    valid <- Q3_tr[valid_index,] ; train <- Q3_tr[-valid_index,]
+    sse_vec[j] <- SSE(i,train,valid)
+  }
+  sse_mat[i,] <- sse_vec
+}
+(sse_cv <- rowMeans(sse_mat))
+which.min(sse_cv)
+
+#(b)
+Q3_tr
+set.seed(1234)
+#여기서 test set이지만, 위에 사용한 함수에 읽히게 하기 위해 변수명을 tr로 썼습니다.
+x1_tr <- rnorm(1000) ; x2_tr <- rnorm(1000) ; epsilon_te <- rnorm(1000,0,0.08)
+y_tr <- y(x1_tr,x2_tr,epsilon_te)
+Q3_te <- as.data.frame(cbind(x1_tr,x2_tr,y_tr))
+sse_vec <- numeric(10)
+for(i in 1:10){
+  sse_vec[i] <- SSE(i,Q3_tr,Q3_te)
+}
+sse_vec
+
+#(c)
+scale(sse_cv)
+plot(1:10,(sse_cv-min(sse_cv))/(max(sse_cv)-min(sse_cv)),col='blue', type='l',lty=3,ylab='scale',xlab='node')
+lines(1:10,(sse_vec-min(sse_vec))/(max(sse_vec)-min(sse_vec)),type='l',lty=2,col='red')
+legend('topright',c('(b)','(c)'),col=c('blue','red'),lty=c(3,2))
+
+# <3> CDC 2010 데이터에 대하여 데이터를 랜덤하게 200개를 훈련데이터로 나머지를 시험데이터로 분할하고 
+  # neuralnet 패키지를 이용하여 atRisk가 출력변수인 신경망(은닉층의 갯수는 1,2이고 
+  # 은닉노드는 2, 5, 10인 조합들에서)을 적합하여 시험 오분류율을 비교하시오. (제출: 4월 26일)# [과제 6] 
+
+# 뉴럴넷 패키지는 헬프파일을 좀 봐야할 것임.. 같은 leanout이라는 옵션을 써도 패키지마다 달라서..
+library(neuralnet)
+load("C:/Users/kyucheol/Desktop/학교생활/과제/4학년 1학기/데이터마이닝/NatalRiskData.rData")
+str(sdata)
+sdata <- as.data.frame(lapply(sdata,as.numeric))
+#표준화
+normalize <- function(x){
+  return (x-min(x))/(max(x)-min(x))
+}
+for(i in 1:ncol(sdata)){
+  sdata[,i] <- (sdata[,i]-min(sdata[,i]))/(max(sdata[,i])-min(sdata[,i]))
+}
+
+set.seed(1)
+tr_idx <- sample(1:nrow(sdata),200,replace = F)
+sdata_tr <- sdata[tr_idx,] ; sdata_te <- sdata[-tr_idx,]
+fmla <- as.formula(paste('atRisk','~',paste(colnames(sdata)[-13],collapse = '+')))
+for(i in c(2,5,10)){
+    CDC_model <- neuralnet(fmla, sdata_tr,
+                         err.fct="ce",act.fct = 'logistic' ,
+                         threshold = 0.5,hidden= c(2,5,10) , linear.output=F,likelihood = T)
+  model_results <- compute(CDC_model,sdata_te[,-13])
+  predicted_atRisk <- model_results$net.result
+  print(paste0('은닉노드가 ',i,'일때 오분류율 : ',sum((predicted_atRisk>0.5)!=sdata_te[,13])/nrow(sdata_te),'\n'))
+}
+
