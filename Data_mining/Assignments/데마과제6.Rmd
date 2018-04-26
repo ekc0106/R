@@ -1,0 +1,129 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+#<1> 6장 2번
+```{r}
+library(mlbench)
+library(nnet)
+library(tree)
+set.seed(7)
+Q2 <- mlbench.xor(100, d = 2)
+plot(Q2)
+error = function(h.size){
+  neuralnet = nnet(classes~., data=Q2, size = h.size,
+                   decay = 5e-4, trace=F)
+  y = Q2$classes
+  p = predict(neuralnet, Q2, type = "class")
+  err = mean(y != p)
+  c(h.size, err)
+}
+out <- t(sapply(2:10,FUN=error))
+plot(out,type="b",xlab="The number of Hidden units",ylab="Error")
+# size = 4로 하자.
+
+neu <- nnet(Q2$classes ~ ., data.frame(Q2$x) , size = 4, decay=5e-4)
+tre <- tree(Q2$classes ~., data.frame(Q2$x))
+logit <- multinom(Q2$classes ~., data.frame(Q2$x), method = 'logistic')
+
+X1 <- seq(min(Q2$x[,1]), max(Q2$x[,1]), length = 100)
+X2 <- seq(min(Q2$x[,2]), max(Q2$x[,2]), length = 100)
+pgrid <- expand.grid(X1,X2)
+names(pgrid) <- c('X1','X2')
+
+pred.nn <- predict(neu,pgrid)
+pred.nn <- 2*ifelse(pred.nn>0.5,1,0) - 1
+pred.lg <- 2*predict(logit, pgrid, type='prob') - 1
+plot(Q2, cex=0.5)
+contour(X1, X2, matrix(pred.lg, length(X1), length(X2)), add = T, labex = 0,
+        drawlavels = FALSE, type = "l", levels = 0, lwd = 2, lty = 7, col = 4)
+contour(X1, X2, matrix(pred.nn, length(X1), length(X2)), add = T, labex = 0,
+        drawlavels = FALSE, type = "l", levels = 0, lwd = 2, lty = 7, col = 3)
+legend('topright', c('logit', 'neural net') ,col = c('blue','green'),lty=c(7,7) )
+par(new = T)
+partition.tree(tre)
+# plot을 보았을 때, 신경망일 때 가장 잘 분류하였고, 그 다음이 tree이고, 로짓모형일 때 가장 분류를 못하였다.
+```
+
+#<2> 6장 3번
+```{r}
+# (a)
+library(cvTools)
+set.seed(3)
+x1_tr <- rnorm(100) ; x2_tr <- rnorm(100) ; epsilon_tr <- rnorm(100,0,0.08)
+a1 <- c(1,3); a2 <- c(2,-3)
+y <- function(x1,x2,epsilon) {as.vector(1/(1+exp(-a1%*%rbind(x1,x2)))+1/(1+exp(-a2%*%rbind(x1,x2)))+epsilon)}
+y_tr <- y(x1_tr,x2_tr,epsilon_tr)
+Q3_tr <- as.data.frame(cbind(x1_tr,x2_tr,y_tr))
+cross <- cvFolds(nrow(Q3_tr),K=10)
+SSE = function(h,train,valid){
+  neuralnet = nnet(y_tr~., data=train, size = h,
+                   decay = 5e-4, trace=F)
+  pred = predict(neuralnet, valid[,-3])
+  sse <- sum((valid$y_tr - as.vector(pred))^2)
+  return(sse)
+}
+cross <- cvFolds(nrow(Q3_tr),K=10)
+sse_vec <- numeric(10)
+sse_mat <- matrix(0,10,10)
+for(i in 1:10){ #i : num of node
+  for(j in 1:10){ #j : 10-fold CV inx
+    valid_index <- cross$subsets[cross$which==j]
+    valid <- Q3_tr[valid_index,] ; train <- Q3_tr[-valid_index,]
+    sse_vec[j] <- SSE(i,train,valid)
+  }
+  sse_mat[i,] <- sse_vec
+}
+(sse_cv <- rowMeans(sse_mat))
+which.min(sse_cv)
+#10-fold CV를 통해 오차제곱합을 구했을 때, 노드가 2일 때 SSE가 제일 적었다.
+
+#(b)
+Q3_tr
+set.seed(1234)
+#여기서 test set이지만, 위에 사용한 함수에 읽히게 하기 위해 변수명을 tr로 썼습니다.
+x1_tr <- rnorm(1000) ; x2_tr <- rnorm(1000) ; epsilon_te <- rnorm(1000,0,0.08)
+y_tr <- y(x1_tr,x2_tr,epsilon_te)
+Q3_te <- as.data.frame(cbind(x1_tr,x2_tr,y_tr))
+sse_vec <- numeric(10)
+for(i in 1:10){
+  sse_vec[i] <- SSE(i,Q3_tr,Q3_te)
+}
+sse_vec
+
+#(c)
+plot(1:10,(sse_cv-min(sse_cv))/(max(sse_cv)-min(sse_cv)),col='blue', type='l',lty=3,ylab='scale',xlab='node')
+lines(1:10,(sse_vec-min(sse_vec))/(max(sse_vec)-min(sse_vec)),type='l',lty=2,col='red')
+legend('topright',c('(a)','(b)'),col=c('blue','red'),lty=c(3,2))
+#실제 은닉노드수의 참값이 2이기에 (a) , (b) 그림을 보았을 때, (a)에서의 10-fold CV를 했을 때가 좀 더 모형을 잘 적합했다고 볼 수 있다. 
+```
+
+#<3> 
+CDC 2010 데이터를 이용하여 200개를 훈련데이터, 나머지를 시험데이터로 분류하자. atRisk를 출력변수로 하여 신경망 적합후 시험 오분류율을 구하라.
+```{r}
+library(neuralnet)
+load("C:/Users/kyucheol/Desktop/학교생활/과제/4학년 1학기/데이터마이닝/NatalRiskData.rData")
+str(sdata)
+sdata <- as.data.frame(lapply(sdata,as.numeric))
+
+set.seed(123)
+tr_idx <- sample(1:nrow(sdata),200,replace = F)
+sdata_tr <- sdata[tr_idx,] ; sdata_te <- sdata[-tr_idx,]
+Fmla <- as.formula(paste('atRisk','~',paste(colnames(sdata)[1:12],collapse = '+')))
+
+for(i in c(2,5,10)){
+    CDC_model <- neuralnet(Fmla, sdata_tr[,1:13], threshold=0.5, act.fct = 'logistic', err.fct = 'ce',
+                           hidden = i, linear.output = F, likelihood = T)
+  model_results <- compute(CDC_model,sdata_te[,1:12])
+  print(paste0('은닉노드가 ',i,'일때 오분류율 : ',sum((model_results$net.result>0.5)!=sdata_te[,13])/nrow(sdata_te)))
+}
+for(j in c(2,5,10)){
+  for(i in c(2,5,10)){
+    CDC_model <- neuralnet(Fmla, sdata_tr[1:13], threshold=0.5, act.fct = 'logistic', err.fct = 'ce',
+                           hidden = c(j,i), linear.output = F, likelihood = T)
+    model_results <- compute(CDC_model,sdata_te[,1:12])
+    print(paste0('은닉노드가 ',j,',',i,'일때 오분류율 : ',sum((model_results$net.result>0.5)!=sdata_te[,13])/nrow(sdata_te)))
+  }
+}
+```
