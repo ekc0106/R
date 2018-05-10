@@ -1,0 +1,311 @@
+## 7.6.4 단순 베이즈 분류 예제
+# 이 자료는 민주당 또는 공화당의 값을 갖는 분류변서와 16개의 범주형 변수로 이루어져있고,
+# 자시한 설명은 도움말을참고해라, naiveBayes함수 에서 laplace 옵션은 라플라스 수정에 사용될 값을 지정하는
+# 옵션이다. 라플라스 수정전과 후를 비교해 보면 훈련자료에 대한 오분류표가 조금 다름을 알 수 있다.
+library(e1071)
+data(HouseVotes84, package = 'mlbench')
+model <- naiveBayes(Class ~ ., data = HouseVotes84)
+predict(model, HouseVotes84[1:10,-1])
+str(HouseVotes84)
+predict(model, HouseVotes84[1:10,-1], type = 'raw')
+pred <- predict(model, HouseVotes84[,-1])
+table(pred, HouseVotes84$Class)
+
+#using laplace smoothing:
+model <- naiveBayes(Class ~., data = HouseVotes84, laplace = 3)
+pred <- predict(model, HouseVotes84[,-1])
+table(pred, HouseVotes84$Class)
+
+
+## 7.6.5 KNN
+# 다음 예제는 Fisher의 붓꽃자료를 5:5로 훈련 및 시험자료로 나누고 훈련자로에 3-근방 분류를 적합한 후
+# 시험자료에 대한 오분류율을 구한 결과 0.04임을 보여준다.
+
+library(class)
+data(iris)
+set.seed(1)
+y <- iris[,5]
+tr.idx <- sample(length(y),75)
+x.tr <- iris[tr.idx,-5]
+x.te <- iris[-tr.idx,-5]
+m1 <- knn(x.tr, x.te, y[tr.idx], k = 3)
+mean(m1 != y[-tr.idx])
+
+#### 7.4 100 -> 훈련 , 1000->시험.
+# 문제대로하지말고, k=1,3,5,...,25정도 까지...해서 knn적합해봐라
+# 이걸 통해 train->5-fold CV구하고,..10-fold로 할사람은 10으로 하셈(왜냐면 10이 기존코드에 잇다네 편하군.)
+rm(list=ls()) ; gc(reset = T)
+library(cvTools)
+library(class)
+set.seed(764)
+x1 <- runif(1100) ; x2 <- runif(1100) ; x3 <- runif(1100) ; x4 <- runif(1100) ; x5 <- runif(1100)
+x6 <- runif(1100) ; x7 <- runif(1100) ; x8 <- runif(1100) ; x9 <- runif(1100) ; x10 <- runif(1100)
+X <- cbind(x1,x2,x3,x4,x5,x6,x7,x8,x9,x10)
+y <- ifelse(x1 > 1/2, 1, 0)
+tv.idx <- sample(1:length(x1), 100)
+X_tv <- X[tv.idx,] ; y_tv <- y[tv.idx]
+k <- seq(1, 25, by = 2)
+cross <- cvFolds(nrow(X_tv),K = 5)
+misclass_vec <- numeric(5)
+k_misclass_vec <- numeric(length(k))
+for(i in k){
+  for(j in 1:5){ #j : 5-fold CV inx
+    valid_index <- cross$subsets[cross$which==j]
+    valid <- X_tv[valid_index,] ; train <- X_tv[-valid_index,]
+    m1 <- knn(train, valid, y_tv[-valid_index], k = i)
+    misclass_vec[j] <- mean(m1 != y_tv[valid_index])
+  }
+  k_misclass_vec[(i+1)/2] <- mean(misclass_vec)
+}
+plot(k,k_misclass_vec, type='l')
+which.min(k_misclass_vec) # 8
+k[which.min(k_misclass_vec)] # k = 15 일때, 오분류율 최소.
+args(knn)
+test_mis_AIC_mat <- matrix(0,length(k),2)
+for(i in k){
+  m1 <- knn(X_tv, X[-tv.idx,] , y_tv, k = i)
+  test_mis_AIC_mat[(i+1)/2,1] <- mean(m1 != y[-tv.idx])
+  test_mis_AIC_mat[(i+1)/2,2] <- mean(m1 != y[-tv.idx]) + 2/i
+}
+plot(k,test_mis_AIC_mat[,1],type='l')
+plot(k,test_mis_AIC_mat[,2],type='l')
+which.min(test_mis_AIC_mat[,1])
+which.min(test_mis_AIC_mat[,2])
+
+
+# <2> KDD Cup 2009 예제에서 선택된 변수를 이용하여 단순베이즈 분류를 실시하고 의사결정나무,
+#     k-NN, 단순베이즈 분류에서 최적인 모형들의 ROC와 AUC값을 통해 성능을 비교하시오. 
+install.packages('ROCR')
+library(ROCR)
+rm(list=ls()); gc(reset = T)
+d <- read.table('./data_set/orange_small_train.data.gz', header=T,
+                sep='\t', na.strings=c('NA',''))     
+# 반응변수 churn 읽어 데이터에 변수 삽입
+churn <- read.table('./data_set/orange_small_train_churn.labels.txt',
+                    header=F, sep='\t') 
+d$churn <- churn$V1     
+# 반응변수 appetency 읽어 데이터에 변수 삽입
+appetency <- read.table('./data_set/orange_small_train_appetency.labels.txt',
+                        header=F, sep='\t')
+d$appetency <- appetency$V1 
+# 반응변수 upselling 읽어 데이터에 변수 삽입
+upselling <- read.table('./data_set/orange_small_train_upselling.labels.txt',
+                        header=F, sep='\t')
+d$upselling <- upselling$V1     
+
+# 데이터를 훈련과 시험 데이터로 분할
+set.seed(729375)    
+d$rgroup <- runif(dim(d)[[1]])
+dTrainAll <- subset(d, rgroup<=0.9)
+dTest <- subset(d, rgroup>0.9)  
+
+outcomes=c('churn','appetency','upselling')
+vars <- setdiff(colnames(dTrainAll), c(outcomes,'rgroup'))
+# 범주형 변수
+catVars <- vars[sapply(dTrainAll[,vars],class) %in%
+                  c('factor','character')]     
+# 숫자형 변수
+numericVars <- vars[sapply(dTrainAll[,vars],class) %in%
+                      c('numeric','integer')]  
+
+# 불필요한 객체 제거
+rm(list=c('d','churn','appetency','upselling')) 
+# churn을 모형화 할것임
+outcome <- 'churn'  
+pos <- '1'  
+# 훈련데이터를 훈련과 검증으로 분할
+useForCal <- rbinom(n=dim(dTrainAll)[[1]], size=1, prob=0.1)>0 
+dCal <- subset(dTrainAll,useForCal)
+dTrain <- subset(dTrainAll,!useForCal)
+
+
+
+mkPredC <- function(outCol,varCol,appCol) { 
+  pPos <- sum(outCol==pos)/length(outCol)  
+  naTab <- table(as.factor(outCol[is.na(varCol)]))
+  # NA에 대하여 positive인 비율
+  pPosWna <- (naTab/sum(naTab))[pos] 
+  vTab <- table(as.factor(outCol),varCol)
+  # 레벨에 따라 positive인 비율
+  pPosWv <- (vTab[pos,]+1.0e-3*pPos)/(colSums(vTab)+1.0e-3)    
+  pred <- pPosWv[appCol] 
+  pred[is.na(appCol)] <- pPosWna   
+  pred[is.na(pred)] <- pPos    
+  pred     
+}
+
+
+for(v in catVars) {
+  pi <- paste('pred',v,sep='')
+  dTrain[,pi] <- mkPredC(dTrain[,outcome],dTrain[,v],dTrain[,v])
+  dCal[,pi] <- mkPredC(dTrain[,outcome],dTrain[,v],dCal[,v])
+  dTest[,pi] <- mkPredC(dTrain[,outcome],dTrain[,v],dTest[,v])
+}
+
+# AUC 계산 함수
+calcAUC <- function(predcol, outcol) {
+  perf <- performance(prediction(predcol, outcol==pos),'auc')
+  as.numeric(perf@y.values)
+}
+
+for(v in catVars) {
+  pi <- paste('pred',v,sep='')
+  aucTrain <- calcAUC(dTrain[,pi], dTrain[,outcome])
+  aucCal <- calcAUC(dCal[,pi], dCal[,outcome])
+  print(sprintf("%s, trainAUC: %4.3f calibrationAUC: %4.3f",
+                pi, aucTrain, aucCal))
+}
+
+mkPredN <- function(outCol,varCol,appCol) {
+  cuts <- unique(as.numeric(quantile(varCol,
+                                     probs=seq(0, 1, 0.1),na.rm=T)))
+  varC <- cut(varCol,cuts)
+  appC <- cut(appCol,cuts)
+  mkPredC(outCol,varC,appC)
+}
+
+for(v in numericVars) {
+  pi <- paste('pred',v,sep='')
+  dTrain[,pi] <- mkPredN(dTrain[,outcome],dTrain[,v],dTrain[,v])
+  dTest[,pi] <- mkPredN(dTrain[,outcome],dTrain[,v],dTest[,v])
+  dCal[,pi] <- mkPredN(dTrain[,outcome],dTrain[,v],dCal[,v])
+  aucTrain <- calcAUC(dTrain[,pi],dTrain[,outcome])
+  if(aucTrain>=0.55) {
+    aucCal <- calcAUC(dCal[,pi],dCal[,outcome])
+    print(sprintf("%s, trainAUC: %4.3f calibrationAUC: %4.3f",
+                  pi,aucTrain,aucCal))
+  }
+}
+
+logLikelyhood <- function(outCol,predCol) { 
+  sum(ifelse(outCol==pos,log(predCol),log(1-predCol)))
+}
+
+# deviance에 기반하여 변수 선택
+selVars <- c()
+minStep <- 5
+baseRateCheck <- logLikelyhood(dCal[,outcome],
+                               sum(dCal[,outcome]==pos)/length(dCal[,outcome]))
+
+# 범주형 
+for(v in catVars) {     
+  pi <- paste('pred',v,sep='')
+  liCheck <- 2*((logLikelyhood(dCal[,outcome],dCal[,pi]) -
+                   baseRateCheck))
+  if(liCheck>minStep) {
+    print(sprintf("%s, calibrationScore: %g",
+                  pi,liCheck))
+    selVars <- c(selVars,pi)
+  }
+}
+
+# 수치형 
+for(v in numericVars) {     
+  pi <- paste('pred',v,sep='')
+  liCheck <- 2*((logLikelyhood(dCal[,outcome],dCal[,pi]) -
+                   baseRateCheck))
+  if(liCheck>=minStep) {
+    print(sprintf("%s, calibrationScore: %g",
+                  pi,liCheck))
+    selVars <- c(selVars,pi)
+  }
+}
+# selVars <- c("predVar194" ,"predVar201", "predVar204", "predVar205" ,"predVar206", "predVar210" ,"predVar212" ,
+#              "predVar218", "predVar221", "predVar225" ,"predVar226", "predVar228" ,"predVar229" ,"predVar6" ,
+#              "predVar7" ,  "predVar13" ,"predVar28" , "predVar65" , "predVar72"  ,"predVar73"  ,"predVar74",
+#              "predVar81",  "predVar113", "predVar125", "predVar126", "predVar134", "predVar140", "predVar144",
+#              "predVar189")
+
+library(e1071)
+
+outcome <- c('churn')
+dTrain_sel <- dTrain[,c(selVars,outcome)] 
+dCal_sel <- dCal[,c(selVars,outcome)]
+dTest_sel <- dTest[,c(selVars,outcome)]
+
+#나이브베이즈
+f <- paste('as.factor(',outcome,'>0) ~ ',
+           paste(selVars, collapse=' + '), sep='')
+nbmodel <- naiveBayes(as.formula(f), data = dTrain_sel)
+dTest_sel$nbpred <- predict(nbmodel, newdata = dTest_sel, type = 'raw')[,'TRUE']
+
+calcAUC(dTest_sel$nbpred, dTest_sel[,outcome])
+plot(performance(prediction(dTest_sel$nbpred,dTest[,outcome]), "tpr", "fpr"))
+
+# 의사결정나무
+library(rpart)
+fV <- paste(outcome,'>0 ~ ',
+            paste(selVars, collapse=' + '), sep='')
+tmodel <- rpart(fV, data = dTrain_sel)
+calcAUC(predict(tmodel,newdata = dTest_sel),dTest_sel[,outcome])
+plot(performance(prediction(predict(tmodel,newdata = dTest_sel),dTest_sel[,outcome]), "tpr", "fpr"))
+
+# knn
+nk <- 200
+knnPred <- function(df){
+  knnDecision <- knn(dTrain[,selVars], df, dTrain[,outcome],k = nk, prob = T)
+  ifelse(knnDecision == TRUE,
+         attributes(knnDecision)$prob, 1- (attributes(knnDecision)$prob))
+}
+print(calcAUC(knnPred(dTest[,selVars]),dTest[,outcome]))
+library(ggplot2)
+plotROC <- function(predcol,outcol) {
+  perf <- performance(prediction(predcol,outcol==pos),'tpr','fpr')
+  pf <- data.frame(
+    FalsePositiveRate=perf@x.values[[1]],
+    TruePositiveRate=perf@y.values[[1]])
+  ggplot() +
+    geom_line(data=pf,aes(x=FalsePositiveRate,y=TruePositiveRate)) +
+    geom_line(aes(x=c(0,1),y=c(0,1)))
+}
+plotROC(knnPred(dTest[,selVars]),dTest[,outcome])
+
+### 과제 8 설명
+# <1> 8장 연습문제 11 (a), (c) 
+# (c)1열은 민주당공화당 분류변수...그거제외하고 나머지 변수로 MSD 다차원척도법...적용해라 적용하려면 거리 혹은 비유사성 을 먼저 구해야함. 그방법은 뒤에 설명이 나왓나?
+# (a)
+# 주성분분석
+library(mlbench)
+data("BostonHousing")
+head(BostonHousing)
+BostonHousing$chas <- as.numeric(BostonHousing$chas)
+
+summary(p1)
+loadings(p1)
+p1$scores
+biplot(p1)
+
+p1 <- princomp(BostonHousing[,-ncol(BostonHousing)], cor = T)
+summary(p1)
+# 제5 주성분까지 보았을 때, 총 변동의 80%를 차지한다.
+loadings(p1)
+screeplot(p1, npcs = 8, type = 'lines')
+biplot(p1)
+# 즉 제1 주성분은  crim, indus, nox, age, rad, tax, ptratio, lstat 과 chas와 앞의 변수들을 제외한 변수들의 차이를 나타낸다.
+# 또한 제 2 주성분은 crim, zn, dis, rad, tax, ptratio와 lstat과 앞의 변수들을 제외한 변수의 차를 의미한다.
+
+# 인자분석
+library(psych)
+BH.cor <- cor(BostonHousing[,-ncol(BostonHousing)])
+BH.FA <- factanal(factors = 5, covmat = BH.cor, rotation = 'none')
+BH.FA$loadings
+# 인자분석에서는 5개의 인자를 사용했을 때, 전체 분산의 66.8% 설명함으로써, 주성분 분석보다 좋지 않다고 볼 수 있다.
+
+# (c)
+data("HouseVotes84")
+str(HouseVotes84)
+sum(is.na(HouseVotes84))
+HV <- na.omit(HouseVotes84)
+HV <- HV[,-1]
+for(i in 1:ncol(HV)){
+  HV[,i] <- as.numeric(HV[,i])
+}
+
+HV <- as.matrix(HV)
+HV_dist <- dist(HV)
+
+cmdHV <- cmdscale(HV_dist)
+a <- cmdHV[,1] ; b <- cmdHV[,2]
+plot(a, b, type = 'n', xlab = '', ylab = '', asp = 1, main = 'HouseVote84')
+text(a, b, paste0(rownames(cmdHV),"(",toupper(substr(HouseVotes84[,1],1,1)),")"),
+     cex = 0.8, col = as.numeric(HouseVotes84[,1]))
