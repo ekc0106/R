@@ -1,0 +1,212 @@
+---
+title: "hw10"
+author: "2013580019 통계학과 엄규철"
+date: "2018년 5월 30일"
+output: word_document
+---
+
+## <1>
+>#### 13.5 mlbench 패키지의 PimaIndiansDiabetes 자료에 대하여 의사결정나무와 AdaBoost의 예측력을 비교하라. 이 자료에 랜덤포레스트를 사용하면 더 나은 결과를 얻을 수 있는가?
+
+```{r}
+rm(list=ls());gc(reset = T)
+library(mlbench)
+library(tree)
+library(caret)
+data("PimaIndiansDiabetes")
+str(PimaIndiansDiabetes)
+
+set.seed(1234)
+train_idx <- createDataPartition(y = PimaIndiansDiabetes$diabetes, p = 0.75, list = F)
+pid_train <- PimaIndiansDiabetes[train_idx,]
+pid_test <- PimaIndiansDiabetes[-train_idx,]
+pid_tree <- tree(diabetes ~ ., data = pid_train)
+str(PimaIndiansDiabetes)
+
+## 의사결정나무(10-fold cv)
+pid_cv <- cv.tree(pid_tree, , prune.tree, K=10)
+opt <- pid_cv$k[which.min(pid_cv$dev)]
+tt <- prune.tree(pid_tree, k = opt)
+PP <- predict(tt, pid_test[,-ncol(PimaIndiansDiabetes)], type = 'class')
+mean(PP != pid_test$diabetes)
+# [1] 0.2864583 , 즉 10-fold cv를 통해 구한 의사결정나무의 오분류율은 0.2864583이다.
+
+
+## 부스팅
+library(adabag)
+boost_tr <- boosting(diabetes ~ ., data = pid_train, boos = T, mfinal = 10)
+pred <- predict(boost_tr, newdata = pid_test)
+mean(pred$class != pid_test$diabetes)
+# [1] 0.25
+
+## 랜덤포레스트
+# install.packages('randomForest')
+library(randomForest)
+rf_res <- randomForest(diabetes ~ ., data = pid_train)
+pred_rf <- predict(rf_res, pid_test[,-ncol(pid_test)])
+mean(pred_rf != pid_test$diabetes)
+# [1] 0.234375
+```
+>#### 세가지 결과, 랜덤포레스트, 부스팅, 10-foldcv를 통한 의사결정 나무 순으로 오분류율이 낮았다. 랜덤포레스트결과 오분류율은 10-foldcv보단 18%, 부스팅보다 6% 감소하였다.
+
+## <2>
+>#### 14.7 2:1의 비율로 library(ElemstatLearn)의 spam자료를 훈련 및 시험자료로 분할하고 로지스틱 회귀와 서포트 벡터 기계를 적용하여 각각의 오분류표를 비교하라.
+
+```{r}
+rm(list = ls()); gc(reset = T)
+library(ElemStatLearn)
+library(e1071)
+data(spam)
+spam$spam <- ifelse(spam$spam == 'spam',1,0)
+set.seed(147)
+train_idx <- createDataPartition(y = spam$spam, p = 2/3, list = F)
+spam_tr <- spam[train_idx,] ; spam_te <- spam[-train_idx,]
+glm_model <- glm(spam~.,family = binomial(link = 'logit'), data = spam_tr)
+
+# 시험데이터 
+pred_glm <- predict(glm_model,newdata=spam_te,
+                         type='response')
+pred_glm <- ifelse(pred_glm>0.5, 1, 0)
+table(spam_te$spam,pred_glm)
+mean(spam_te$spam != pred_glm)
+
+## 지지벡터기계
+svm_model <- svm(spam~., data = spam_tr)
+pred_svm <- predict(svm_model, spam_te, type = 'response')
+pred_svm <- ifelse(pred_svm > 0.5, 1, 0)
+table(spam_te$spam, pred_svm)
+mean(spam_te$spam != pred_svm)
+```
+>#### 약 3%정도 오분류율이 감소하였다.
+
+## <3>
+>#### Spambase 데이터에 대하여 변수의 중요도를 기준으로 적절히 변수를 선택한 후 배깅, 부스팅을 실시하고 변수를 선택하기 이전의 결과와 비교해보시오.
+
+  - 앞서 수업시간에 했던 변수 중요도의 크기에 따른 상위 10개의 변수는 아래와 같은 결과를 나타내었다.
+# > varImp
+# row_names    non-spam       spam MeanDecreaseAccuracy MeanDecreaseGini
+# 1              char.freq.bang 16.14420915 16.9220956            20.548767      236.2005241
+# 2            char.freq.dollar 14.12186899 11.5353749            15.026711      161.7865565
+# 3            word.freq.remove 19.17276353 14.0201819            20.229958      158.0080425
+# 4              word.freq.free 15.00589659 12.4948545            16.134696      137.3168850
+# 5              word.freq.your  8.91827356 10.0569838            12.877406      128.6300718
+# 6  capital.run.length.average 13.27466970 15.2007064            19.081538      107.3079520
+# 7  capital.run.length.longest 11.02185740 10.9713018            13.677342       91.3329499
+# 8                word.freq.hp 10.86297266 15.4793967            16.652124       83.5160808
+# 9             word.freq.money  8.23227869  7.2749391             9.326391       74.8195447
+# 10   capital.run.length.total  8.82370082  8.5741733            11.350472       63.9615960
+```{r}
+rm(list= ls()); gc(reset = T)
+imp_var <- c('char.freq.bang','char.freq.dollar','word.freq.remove','word.freq.free',
+            'word.freq.your','capital.run.length.average','capital.run.length.longest',
+            'word.freq.hp','word.freq.money','capital.run.length.total')
+# 데이터를 읽어서 훈련과 시험 데이터로 분할 
+
+spamD <- read.table('C:/Users/kyucheol/Desktop/학교생활/과제/4학년 1학기/데이터마이닝/spamD.tsv',header=T,sep='\t')
+spamTrain <- subset(spamD,spamD$rgroup>=10)
+spamTest <- subset(spamD,spamD$rgroup<10)
+
+spamVars <- setdiff(colnames(spamD),list('rgroup','spam'))
+spamFormula <- as.formula(paste('spam=="spam"',     
+                                paste(spamVars,collapse=' + '),sep=' ~ '))
+spamFormula_imp <-  as.formula(paste('spam=="spam"',     
+                                     paste(imp_var,collapse=' + '),sep=' ~ '))
+
+# 로그 우도 함수
+loglikelihood <- function(y, py) {      
+  pysmooth <- ifelse(py==0, 1e-12,
+                     ifelse(py==1, 1-1e-12, py))
+  
+  sum(y * log(pysmooth) + (1-y)*log(1 - pysmooth))
+}
+
+
+# 정확성 측도 함수
+# 정규화된 deviance, 예측 정확도, fl = precision*recall
+accuracyMeasures <- function(pred, truth, name="model") {   
+  dev.norm <- -2*loglikelihood(as.numeric(truth), pred)/length(pred)    
+  ctable <- table(truth=truth,
+                  pred=(pred>0.5))                                       
+  accuracy <- sum(diag(ctable))/sum(ctable)
+  precision <- ctable[2,2]/sum(ctable[,2])
+  recall <- ctable[2,2]/sum(ctable[2,])
+  f1 <- 2*precision*recall/(precision+recall)
+  data.frame(model=name, accuracy=accuracy, f1=f1, dev.norm)
+}
+
+# 1. 배깅
+library(rpart)
+ntrain <- dim(spamTrain)[1]
+n <- ntrain                  
+ntree <- 100
+
+# 붓스트랩 표본 추출 반복
+samples <- sapply(1:ntree,          
+                  FUN = function(iter)
+                  {sample(1:ntrain, size=n, replace=T)})
+# 각 붓스트랩 표본에 대하여 의사결정나무 적합
+treelist <-lapply(1:ntree,          
+                  FUN=function(iter)
+                  {samp <- samples[,iter];
+                  rpart(spamFormula, spamTrain[samp,])})
+treelist_imp <- lapply(1:ntree,          
+                       FUN=function(iter)
+                       {samp <- samples[,iter];
+                       rpart(spamFormula_imp, spamTrain[samp,c(imp_var,'spam')])})
+# 배깅에 의한 확률 예측값 함수
+predict.bag <- function(treelist, newdata) {    
+  preds <- sapply(1:length(treelist),
+                  FUN=function(iter) {
+                    predict(treelist[[iter]], newdata=newdata)})
+  predsums <- rowSums(preds)
+  predsums/length(treelist)
+}
+
+# 시험데이터에서의 평가
+accuracyMeasures(predict.bag(treelist, newdata=spamTest),
+                 spamTest$spam=="spam",
+                 name="bagging, test")
+accuracyMeasures(predict.bag(treelist_imp, newdata=spamTest[,c(imp_var,'spam')]),
+                 spamTest$spam=="spam",
+                 name="bagging, test")
+# 2. 부스팅
+boost_tr <- boosting(spam ~ ., data = spamTrain, boos = T, mfinal = 10)
+pred <- predict(boost_tr, newdata = spamTest)
+mean(pred$class != spamTest$spam)
+
+boost_tr_imp <- boosting(spam ~ ., data = spamTrain[,c(imp_var,'spam')], boos = T, mfinal = 10)
+pred_imp <- predict(boost_tr_imp, newdata = spamTest[,c(imp_var,'spam')])
+mean(pred_imp$class != spamTest$spam)
+```
+>####  모든 변수를 사용했을 때, 정분류율은 0.9126638, 상위 10개의 중요변수를 사용했을 때 정분류율은 0.9061135로 감소했음을 볼 수 있다. 뿐만아니라 부스팅에서 역시 0.04803493에서 0.07641921로 오분류율이 증가했음을 볼 수 있다.
+
+## <4> 
+>#### Spiral 예제에 대하여 가우스 커널 지지벡터기계를 적합하고 선형 커널의 결과와 비교하시오.
+
+```{r}
+rm(list=ls()) ; gc(reset=T)
+library(kernlab)
+data(spirals) 
+sc <- specc(spirals, centers = 2)   
+s <- data.frame(x=spirals[,1],y=spirals[,2],
+                class=as.factor(sc))     
+# 데이터 생성 및 분할
+set.seed(2335246L)
+train_idx <- createDataPartition(y = s$class, p = 0.7, list = F)
+
+sTrain <- s[train_idx,]
+sTest <- s[-train_idx,]
+
+#선형 커널
+library(e1071)
+mSVMV <- svm(class~x+y,data=sTrain,kernel='linear',type='nu-classification')    
+pred_lin <- predict(mSVMV,newdata=sTest,type='response')  
+table(sTest$class, pred_lin)
+mean(sTest$class != pred_lin)
+# ,type='nu-classification'
+mSVMV_g <- svm(class~x+y,data=sTrain)    
+pred_g <- predict(mSVMV_g,newdata=sTest,type='response')  
+table(sTest$class, pred_g)
+mean(sTest$class != pred_g)
+```
+>#### 오분류율이 선형커널에 비해 약 34%정도 줄어들었음을 알 수 있다.
