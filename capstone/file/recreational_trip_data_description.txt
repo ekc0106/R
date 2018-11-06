@@ -1,0 +1,77 @@
+* Program \racd\racd6p2.do  August 1998
+ 
+log using racd6p2.out, replace
+
+* This STATA program reads in data and gives summary statistics and Poisson and
+* negative binomial models for the recreational trips data studined in
+* Chapter 6.4-6.5 and Chapter 12.6 of
+*   A.C. Cameron and Pravin K. Trivedi (1998),
+*   REGRESSION ANALYSIS OF COUNT DATA,
+*   Econometric Society Monograph No.30, Cambridge University Press.
+ 
+* The program does only a small part of the analysis in the book.
+
+* To run you need file
+*    racd6d2.asc
+* in your directory
+
+********** DATA DESCRIPTION
+*
+* A detailed discussion of the variables can be found in 
+* C. Sellar, J.R. Stoll and J.P. Chavas (1985), 
+* "Validation of Empirical Measures of Welfare Change: A Comparison of nonmarket 
+* Techniques," Land Economics, 61, 156-175.  
+* Data used with permission of Sellar et al. (1985)
+* And also T. Ozuna and I. Gomaz (1995) 
+* "Specification and Testing of Count Data Recreation Demand Functions," 
+* Empirical Economics, 20, 543-550.
+
+* The analysis of these data in the count data book is based on 
+* S. Gurmu and P.K. Trivedi (1996)
+* "Excess Zeros in Count Data Models for Recreational Trips"
+* Journal of Business and Economics Statistics, 14, 469-477.
+* "Multiple Bids as a Consequence of Target Management Resistance"
+
+* 1:  Number of boating trips to Lake Somerville, East Texas, in 1980  (TRIPS or V3)
+* 2:  Facility's subjective quality ranking  (SO)
+* 3:  Respondent's taste for water-skiing  (SKI)
+* 4:  Income - categorical variable  (I)
+* 5:  Cost dummy variable; 1 if an annual user fee is paid at Lake somerville  (FC3) 
+* 6:  Travel cost to Lake Conroe  (C1)
+* 7:  Travel cost to Lake Somerville  (C3)
+* 8:  Travel cost to Lake Houston  (C4)
+
+********** CREATE OUTPUT FILE
+*
+di "racd6p2.do for Cameron and Trivedi RACD chapters 6.4-6.5 and 12.6"
+
+********** READ DATA
+*
+* The Recreational trips data are in ascii file racd6d2.asc
+* There are 659 observations on 8 variables with one lines per obs
+* The data are fixed format with 
+*   line 1  variables 1-8  5F7.0,3F11.0
+
+infile TRIPS SO SKI I FC3 C1 C3 C4 using racd6d2.asc
+
+********** DATA TRANSFORMATIONS
+*
+
+******** CHECK DATA: DESCRIPTIVE STATISTICS
+*
+describe
+summarize
+
+******** SAVE DATA AS STATA DATA SET
+*
+* save racd6d2, replace
+
+
+********** POISSON REGRESSION 
+*
+poisson TRIPS SO SKI I FC3 C1 C3 C4 
+nbreg TRIPS SO SKI I FC3 C1 C3 C4 
+
+********** CLOSE OUTPUT
+log close
+
