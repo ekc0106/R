@@ -3,6 +3,7 @@ if(!require(dplyr)) install.packages('dplyr')
 if(!require(MASS)) install.packages('MASS')
 if(!require(pscl)) install.packages('pscl')
 if(!require(lme4)) install.packages('lme4')
+if(!require(DT)) install.packages('DT')
 
 recreation_trip_dat <-  read.table('file:///C:/Users/kyucheol/Desktop/recreational_trip_data.txt', header = F, sep = '',stringsAsFactors = F)
 names(recreation_trip_dat) <- c('V3','SO','SKI','I','FC3','C1','C3','C4')
@@ -20,12 +21,13 @@ str(recreation_trip_dat)
 # C3  Travel cost to Lake Somerville
 # C4  Travel cost to Lake Houston
 head(recreation_trip_dat)
-# as.matrix(table(recreation_trip_dat$V3))
-
+# t(as.matrix(table(recreation_trip_dat$V3)))
+sapply(recreation_trip_dat,summary)
 
 pois_model <-  glm(V3 ~ ., data = recreation_trip_dat, family = 'poisson')
 negbin_model <- MASS::glm.nb(V3 ~ ., data = recreation_trip_dat)
-zip <- zeroinfl(V3 ~ .|1+SO+I, data = recreation_trip_dat, dist = 'poisson')
+zip <- zeroinfl(V3 ~ .|1+SO+C3+C4, data = recreation_trip_dat, dist = 'poisson')
+# zip <- zeroinfl(V3 ~ .|1+SO+I, data = recreation_trip_dat, dist = 'poisson') # 논문은 이렇게 모형세웠는데 암만봐도 I의 zero part가 너무 유의하지않음.
 pois_hurdle <- hurdle(V3 ~ ., data = recreation_trip_dat, dist = 'poisson')
 negbin_hurdle <- hurdle(V3 ~ ., data = recreation_trip_dat, dist = 'negbin')
 
@@ -39,9 +41,7 @@ table_fun <- function(model_mat){
 }
 
 # 1. Poisson
-poi_mu = pois_model$fitted.values
-poi_mu %>% head
-
+poi_mu <- pois_model$fitted.values
 
 pois_mat <- matrix(0,length(poi_mu),101)
 for(j in 1:length(poi_mu)){
@@ -50,26 +50,25 @@ for(j in 1:length(poi_mu)){
   }
 }
 
-dim(pois_mat)
-round(colSums(pois_mat))
+# round(colSums(pois_mat))
 (pois_table <- table_fun(pois_mat))
 
 # 2. Negbin
 theta_neg <- negbin_model$fitted.values
-PI <- rep(1/negbin_model$theta,659)
-
+PI <- rep(1/negbin_model$theta,659) #if Negbin-2 (k=0)
+# PI <- 1/negbin_model$theta*theta_neg    # if Negbin-1 (k=1)
 negbin_mat <- matrix(0,659,101)
 for(j in 1:659){
   for(y in 0:100){
     negbin_mat[j,y+1] <- gamma(y+PI[j])/(gamma(PI[j])*gamma(y+1))*(PI[j]/(theta_neg[j]+PI[j]))^PI[j]*(theta_neg[j]/(theta_neg[j]+PI[j]))^y
   }
 }
-round(colSums(negbin_mat))
+# round(colSums(negbin_mat))
 (negbin_table <- table_fun(negbin_mat)) # 이것도 뭔가 비슷한데 조금 다르네 값이..
 
 # 3. ZIP
 xbeta <- as.vector(t(as.matrix(zip$coefficients$count)) %*% t(cbind(intercept = rep(1,nrow(recreation_trip_dat)), recreation_trip_dat[,-1])))
-zr <- as.vector(t(as.matrix(zip$coefficients$zero)) %*% t(cbind(intercept = rep(1,nrow(recreation_trip_dat)), recreation_trip_dat[,c('SO','I')])))
+zr <- as.vector(t(as.matrix(zip$coefficients$zero)) %*% t(cbind(intercept = rep(1,nrow(recreation_trip_dat)), recreation_trip_dat[,c('SO','C3','C4')])))
 mu <- exp(xbeta) ; Pi <- exp(zr)/(1+exp(zr))
 phat0 <- Pi + (1-Pi)*exp(-mu)
 sum(phat0)
@@ -79,9 +78,8 @@ for(i in 1:659){
   for(y in 1:100)
     zip_mat[i,y+1] <- (1-Pi[i])*mu[i]^y*exp(-mu[i])/factorial(y)
 }
-sum(colSums(zip_mat))  
-round(colSums(zip_mat))
-rowSums(zip_mat)
+# sum(colSums(zip_mat))
+# round(colSums(zip_mat))
 (zip_table <- table_fun(zip_mat)) # zip모형의 경우, 논문과 아예 모수추정치가 다르게나와서 표값도다름... 논문추정치대로 밑에구해보기
 
 ## 논문대로...zip
@@ -106,6 +104,7 @@ rowSums(zip_mat)
 zr <- as.vector(t(as.matrix(pois_hurdle$coefficients$zero)) %*% t(cbind(intercept = rep(1,nrow(recreation_trip_dat)), recreation_trip_dat[,-1])))
 theta_zero <- exp(zr)
 phat0 <- exp(-theta_zero)
+
 phat0 %>% sum
 
 xbeta <- as.vector(t(as.matrix(pois_hurdle$coefficients$count)) %*% t(cbind(intercept = rep(1,nrow(recreation_trip_dat)), recreation_trip_dat[,-1])))
@@ -120,10 +119,9 @@ for(i in 1:659){
   }
 }
 
-sum(colSums(poish_mat))  
-round(colSums(poish_mat))
-rowSums(poish_mat)
-(poisH_table <- table_fun(poish_mat))
+# sum(colSums(poish_mat))  
+# round(colSums(poish_mat))
+(poisH_table <- table_fun(poish_mat)) # 모수추정값의 차이가 있다보니 약간 값이다름.
 
 # 5. Negbin_hurdle
 zr <- as.vector(t(as.matrix(negbin_hurdle$coefficients$zero)) %*% t(cbind(intercept = rep(1,nrow(recreation_trip_dat)), recreation_trip_dat[,-1])))
@@ -145,9 +143,9 @@ for(i in 1:659){
   }
 }
 
-sum(colSums(negh_mat))  
-round(colSums(negh_mat))
-rowSums(negh_mat)
+# sum(colSums(negh_mat))  
+# round(colSums(negh_mat))
+# rowSums(negh_mat)
 (negbinH_table <- table_fun(negh_mat))
 
 
@@ -155,4 +153,16 @@ rowSums(negh_mat)
 all_table <- data.frame(observed = c(417,68,38,34,17,13,21,16,5,15,14,1),
                         pois_table, negbin_table, zip_table, poisH_table, negbinH_table)
 rownames(all_table) <- c('0','1','2','3','4','5','6-8','9-11','12-14','15-17','18-62','63-100')
+knitr::kable(t(all_table))
 View(t(all_table))
+
+# CAIC = -2(log-likelihood) + k*(log(N) + 1)
+# AIC = -2(log-likelihood) + 2*k, k : no. of free parameters
+
+pois_CAIC <- pois_model$aic - 16 + 8*(log(659) + 1)
+negbin_CAIC <- negbin_model$aic - 16 + 8*(log(659) + 1)
+zip_CAIC <- -2*zip$loglik + 8*(log(659) + 1)
+poisH_CAIC <- -2*pois_hurdle$loglik + 8*(log(659) + 1)
+negbinH_CAIC <- -2*negbin_hurdle$loglik + 8*(log(659) + 1)
+
+CAIC_df <- data.frame(pois_CAIC, negbin_CAIC, zip_CAIC, poisH_CAIC, negbinH_CAIC)
